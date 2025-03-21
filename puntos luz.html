@@ -1,0 +1,379 @@
+<div id="portals-container">
+    <canvas id="portals-canvas"></canvas>
+  </div>
+  
+  <style>
+    #portals-container {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      overflow: hidden;
+      background: #111;
+    }
+    
+    #portals-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Configuración
+      const canvas = document.getElementById('portals-canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Variables para el seguimiento del cursor
+      let mouseX = canvas.width / 2;
+      let mouseY = canvas.height / 2;
+      let isActive = false;
+      
+      // Para seguimiento de tiempo
+      let time = 0;
+      
+      // Declaramos la variable portals antes de usarla
+      let portals = [];
+      
+      // Definición de colores para portales
+      const portalColors = [
+        [
+          { stop: 0.0, color: 'rgba(255, 0, 128, 0.7)' },
+          { stop: 0.5, color: 'rgba(255, 0, 255, 0.5)' },
+          { stop: 1.0, color: 'rgba(128, 0, 255, 0.0)' }
+        ],
+        [
+          { stop: 0.0, color: 'rgba(0, 255, 255, 0.7)' },
+          { stop: 0.5, color: 'rgba(0, 128, 255, 0.5)' },
+          { stop: 1.0, color: 'rgba(0, 0, 255, 0.0)' }
+        ],
+        [
+          { stop: 0.0, color: 'rgba(255, 255, 0, 0.7)' },
+          { stop: 0.5, color: 'rgba(255, 128, 0, 0.5)' },
+          { stop: 1.0, color: 'rgba(255, 0, 0, 0.0)' }
+        ],
+        [
+          { stop: 0.0, color: 'rgba(0, 255, 128, 0.7)' },
+          { stop: 0.5, color: 'rgba(0, 255, 64, 0.5)' },
+          { stop: 1.0, color: 'rgba(0, 128, 0, 0.0)' }
+        ]
+      ];
+      
+      // Ajustar el canvas al tamaño de la ventana
+      function resizeCanvas() {
+        const container = document.getElementById('portals-container');
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+        
+        // Reiniciar portales al redimensionar
+        initPortals();
+      }
+      
+      function initPortals() {
+        // Número de portales basado en el tamaño del canvas
+        const numPortals = Math.min(Math.max(canvas.width, canvas.height) / 100, 15);
+        
+        // Limpiamos el array de portales existente
+        portals = [];
+        
+        for (let i = 0; i < numPortals; i++) {
+          portals.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            baseRadius: Math.random() * 50 + 30,  // Aseguramos un radio base positivo
+            pulseRadius: 0,
+            // Limitamos la amplitud de pulsación para evitar valores negativos
+            maxPulseRadius: Math.random() * 40 + 10,  // Reducido para evitar negativos
+            pulseSpeed: Math.random() * 0.03 + 0.01,
+            pulseOffset: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() * 0.5 + 0.2) * (Math.random() > 0.5 ? 1 : -1),
+            rotation: Math.random() * Math.PI * 2,
+            rings: Math.floor(Math.random() * 3) + 3,
+            colorIndex: Math.floor(Math.random() * portalColors.length),
+            distortionLevel: Math.random() * 10 + 5,
+            distortionSpeed: Math.random() * 0.01 + 0.005,
+            attracted: false,
+            speedX: 0,
+            speedY: 0,
+            friction: 0.95
+          });
+        }
+      }
+      
+      // Llamar a resize inicialmente y en cada cambio de tamaño
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+      
+      // Eventos de mouse/touch
+      canvas.addEventListener('mousemove', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+        isActive = true;
+      });
+      
+      canvas.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        mouseX = touch.clientX - rect.left;
+        mouseY = touch.clientY - rect.top;
+        isActive = true;
+      });
+      
+      canvas.addEventListener('mouseout', function() {
+        isActive = false;
+      });
+      
+      canvas.addEventListener('touchend', function() {
+        isActive = false;
+      });
+      
+      // Función para dibujar un portal dimensional
+      function drawPortal(portal) {
+        // Calcular radio pulsante con protección contra valores negativos
+        portal.pulseRadius = Math.sin(time * portal.pulseSpeed + portal.pulseOffset) * portal.maxPulseRadius;
+        // Garantizamos que currentRadius sea siempre positivo
+        const currentRadius = Math.max(1, portal.baseRadius + portal.pulseRadius);
+        
+        // Actualizar rotación
+        portal.rotation += portal.rotationSpeed * 0.01;
+        
+        // Aplicar distorsión
+        const distortion = Math.sin(time * portal.distortionSpeed) * portal.distortionLevel;
+        
+        // Establecer estilo de composición
+        ctx.globalCompositeOperation = 'screen';
+        
+        // Dibujar anillos concéntricos
+        for (let i = 0; i < portal.rings; i++) {
+          // Garantizamos que ringRadius sea siempre positivo
+          const ringRadius = Math.max(1, currentRadius * (1 - i / portal.rings));
+          
+          try {
+            // Crear gradiente con verificación de errores
+            const gradient = ctx.createRadialGradient(
+              portal.x, portal.y, 0,  // Empezar desde el centro
+              portal.x, portal.y, ringRadius  // Hasta el radio del anillo
+            );
+            
+            // Aplicar colores
+            portalColors[portal.colorIndex].forEach(color => {
+              gradient.addColorStop(color.stop, color.color);
+            });
+            
+            ctx.fillStyle = gradient;
+            
+            // Dibujar forma distorsionada
+            ctx.beginPath();
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 60) {
+              const distortedRadius = ringRadius + Math.sin(angle * 3 + portal.rotation + time * 0.1) * distortion;
+              const x = portal.x + Math.cos(angle) * distortedRadius;
+              const y = portal.y + Math.sin(angle) * distortedRadius;
+              
+              if (angle === 0) {
+                ctx.moveTo(x, y);
+              } else {
+                ctx.lineTo(x, y);
+              }
+            }
+            ctx.closePath();
+            ctx.fill();
+          } catch (error) {
+            console.log("Error al dibujar portal:", error);
+            // En caso de error, continuamos con el siguiente anillo
+            continue;
+          }
+        }
+        
+        // Efecto brillante central
+        ctx.globalCompositeOperation = 'lighter';
+        try {
+          // Usamos un valor seguro para el radio del brillo central
+          const centerGlowRadius = Math.max(5, currentRadius * 0.2);
+          
+          ctx.fillStyle = portalColors[portal.colorIndex][0].color.replace('0.7', '1.0');
+          ctx.beginPath();
+          ctx.arc(portal.x, portal.y, centerGlowRadius, 0, Math.PI * 2);
+          ctx.fill();
+        } catch (error) {
+          console.log("Error al dibujar brillo central:", error);
+        }
+        
+        // Restaurar composición
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      
+      // Función para actualizar posiciones de los portales
+      function updatePortals() {
+        portals.forEach(portal => {
+          // Comprobar si el cursor está activo y cerca del portal
+          if (isActive) {
+            const dx = mouseX - portal.x;
+            const dy = mouseY - portal.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < 150) {
+              // Atraer el portal hacia el cursor
+              portal.attracted = true;
+              portal.speedX += dx * 0.002;
+              portal.speedY += dy * 0.002;
+            } else {
+              portal.attracted = false;
+            }
+          }
+          
+          // Aplicar velocidad y fricción
+          portal.speedX *= portal.friction;
+          portal.speedY *= portal.friction;
+          
+          portal.x += portal.speedX;
+          portal.y += portal.speedY;
+          
+          // Mantener portales dentro del canvas con efecto de rebote
+          if (portal.x < 0 || portal.x > canvas.width) {
+            portal.speedX *= -0.8;
+            portal.x = Math.max(0, Math.min(canvas.width, portal.x));
+          }
+          
+          if (portal.y < 0 || portal.y > canvas.height) {
+            portal.speedY *= -0.8;
+            portal.y = Math.max(0, Math.min(canvas.height, portal.y));
+          }
+        });
+      }
+      
+      // Efecto de conexión entre portales cercanos
+      function drawConnections() {
+        ctx.globalCompositeOperation = 'lighter';
+        
+        for (let i = 0; i < portals.length; i++) {
+          for (let j = i + 1; j < portals.length; j++) {
+            const dx = portals[i].x - portals[j].x;
+            const dy = portals[i].y - portals[j].y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Conectar portales cercanos
+            if (distance < 200) {
+              const opacity = (1 - distance / 200) * 0.5;
+              
+              // Mezclar colores
+              const colorI = portalColors[portals[i].colorIndex][0].color;
+              const colorJ = portalColors[portals[j].colorIndex][0].color;
+              
+              try {
+                const gradient = ctx.createLinearGradient(
+                  portals[i].x, portals[i].y,
+                  portals[j].x, portals[j].y
+                );
+                
+                gradient.addColorStop(0, colorI.replace('0.7', opacity.toString()));
+                gradient.addColorStop(1, colorJ.replace('0.7', opacity.toString()));
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = 2 * opacity;
+                ctx.beginPath();
+                ctx.moveTo(portals[i].x, portals[i].y);
+                
+                // Curva de conexión
+                const midX = (portals[i].x + portals[j].x) / 2;
+                const midY = (portals[i].y + portals[j].y) / 2;
+                const controlX = midX + Math.sin(time * 0.05) * 30;
+                const controlY = midY + Math.cos(time * 0.05) * 30;
+                
+                ctx.quadraticCurveTo(controlX, controlY, portals[j].x, portals[j].y);
+                ctx.stroke();
+              } catch (error) {
+                console.log("Error al dibujar conexión:", error);
+                continue;
+              }
+            }
+          }
+        }
+        
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      
+      // Función de efectos especiales cuando el cursor está cerca
+      function drawCursorEffects() {
+        if (!isActive) return;
+        
+        ctx.globalCompositeOperation = 'lighter';
+        
+        // Crear efecto de ondas desde el cursor
+        const numWaves = 3;
+        const maxRadius = 100;
+        
+        for (let i = 0; i < numWaves; i++) {
+          const phase = (time * 0.05 + i / numWaves * Math.PI * 2) % (Math.PI * 2);
+          const radius = (phase / (Math.PI * 2)) * maxRadius;
+          const opacity = 1 - (phase / (Math.PI * 2));
+          
+          ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.5})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(mouseX, mouseY, radius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        try {
+          // Efecto de brillo central con validación
+          const glow = ctx.createRadialGradient(
+            mouseX, mouseY, 0,
+            mouseX, mouseY, 30  // Radio fijo y seguro
+          );
+          
+          glow.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+          glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(mouseX, mouseY, 30, 0, Math.PI * 2);
+          ctx.fill();
+        } catch (error) {
+          console.log("Error al dibujar efecto del cursor:", error);
+        }
+        
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      
+      // Función principal de animación
+      function animate() {
+        try {
+          // Incrementar el tiempo
+          time += 0.1;
+          
+          // Limpiar el canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // Actualizar posiciones
+          updatePortals();
+          
+          // Dibujar conexiones entre portales
+          drawConnections();
+          
+          // Dibujar portales
+          portals.forEach(portal => {
+            drawPortal(portal);
+          });
+          
+          // Dibujar efectos del cursor
+          drawCursorEffects();
+          
+          // Llamar al próximo frame
+          requestAnimationFrame(animate);
+        } catch (error) {
+          console.log("Error en el bucle de animación:", error);
+          // Intentar recuperarse del error y continuar
+          requestAnimationFrame(animate);
+        }
+      }
+      
+      // Iniciar animación
+      animate();
+    });
+  </script>
