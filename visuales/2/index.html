@@ -1,0 +1,227 @@
+            // Incrementar contador de frames
+            frameCount++;<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuadrado con Efecto de Feedback Infinito</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="squareCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("squareCanvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Configuración básica
+        const calculateMainSquareSize = () => {
+            return Math.max(canvas.width, canvas.height) * 0.8; // Reducido de 1.2 a 0.8
+        };
+        
+        const maxSquares = 50; // Número de cuadrados en el efecto de feedback
+        const scaleRatio = 0.93; // Ratio de reducción entre cuadrados
+        const baseColor = "rgba(128, 0, 255, 0.7)"; // Color morado base
+        const easing = 0.05; // Factor de suavizado reducido para movimiento más lento
+        
+        // Estado de la animación
+        let initialSize = calculateMainSquareSize();
+        let mouseX = canvas.width / 2;
+        let mouseY = canvas.height / 2;
+        let isMouseActive = false;
+        let targetX = mouseX;
+        let targetY = mouseY;
+        let currentX = mouseX;
+        let currentY = mouseY;
+        let frameCount = 0; // Contador de frames para el desfase temporal
+        
+        // Historial de posiciones para el desfase temporal
+        const positionHistory = Array(maxSquares).fill().map(() => ({
+            x: canvas.width / 2,
+            y: canvas.height / 2
+        }));
+
+        // Función para crear un cuadrado usando splines (curvas suaves)
+        function drawSquareSpline(x, y, size, rotation, color, lineWidth) {
+            // Calculamos los puntos del cuadrado
+            const halfSize = size / 2;
+            const points = [
+                { x: -halfSize, y: -halfSize },
+                { x: halfSize, y: -halfSize },
+                { x: halfSize, y: halfSize },
+                { x: -halfSize, y: halfSize }
+            ];
+            
+            // Aplicar rotación a los puntos
+            const rotatedPoints = points.map(point => {
+                const rotatedX = point.x * Math.cos(rotation) - point.y * Math.sin(rotation);
+                const rotatedY = point.x * Math.sin(rotation) + point.y * Math.cos(rotation);
+                return { 
+                    x: rotatedX + x,
+                    y: rotatedY + y
+                };
+            });
+            
+            // Dibujar el cuadrado usando curvas de Bézier
+            ctx.beginPath();
+            
+            // Para cada lado del cuadrado, usamos una curva de Bézier
+            for (let i = 0; i < rotatedPoints.length; i++) {
+                const current = rotatedPoints[i];
+                const next = rotatedPoints[(i + 1) % rotatedPoints.length];
+                
+                // Punto de control para la curva - ligeramente desplazado para dar efecto de curvatura
+                const controlAmount = size * 0.05; // Controla cuánta curvatura tendrán los lados
+                
+                // Calcular punto de control
+                const dx = next.x - current.x;
+                const dy = next.y - current.y;
+                const controlX = current.x + dx * 0.5 + dy * controlAmount;
+                const controlY = current.y + dy * 0.5 - dx * controlAmount;
+                
+                if (i === 0) {
+                    ctx.moveTo(current.x, current.y);
+                }
+                
+                // Dibujar curva cuadrática
+                ctx.quadraticCurveTo(controlX, controlY, next.x, next.y);
+            }
+            
+            ctx.closePath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+        }
+
+        // Función principal de dibujo
+        function draw() {
+            // Primera posición: centro de la pantalla fijo para el cuadrado principal
+            const mainX = canvas.width / 2;
+            const mainY = canvas.height / 2;
+            
+            // Actualizar la posición objetivo
+            if (isMouseActive) {
+                targetX = mouseX;
+                targetY = mouseY;
+            } else {
+                // Si no hay mouse, todo debe regresar al centro
+                targetX = canvas.width / 2;
+                targetY = canvas.height / 2;
+            }
+            
+            // Suavizar movimiento
+            currentX += (targetX - currentX) * easing;
+            currentY += (targetY - currentY) * easing;
+            
+            // Actualizar el historial de posiciones para el desfase (más lento)
+            // Solo actualiza cada 2 frames para crear más desfase
+            if (frameCount % 2 === 0) {
+                positionHistory.unshift({x: currentX, y: currentY});
+                positionHistory.pop(); // Eliminar la última posición para mantener el tamaño constante
+            }
+            
+            // Limpiar el canvas con efecto de desvanecimiento
+            ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar primero el cuadrado principal fijo en el centro
+            initialSize = calculateMainSquareSize(); // Recalcular por si cambió el tamaño de la ventana
+            drawSquareSpline(
+                mainX,
+                mainY,
+                initialSize,
+                0, // Sin rotación
+                baseColor,
+                12 // Grosor de línea aumentado (antes era 8)
+            );
+            
+            // Dibujar los cuadrados del efecto de feedback con desfase de tiempo
+            let currentSize = initialSize * scaleRatio; // Comenzar con el segundo cuadrado
+            let currentLineWidth = 10; // Grosor de línea inicial aumentado
+            
+            for (let i = 0; i < maxSquares - 1; i++) {
+                // Calcular color con transparencia decreciente
+                const alpha = Math.max(0.05, 0.7 - (i / maxSquares) * 0.6);
+                const color = `rgba(128, 0, 255, ${alpha})`;
+                
+                // Obtener posición con desfase temporal
+                const position = positionHistory[i];
+                
+                // Dibujar cuadrado con desfase
+                if (position) {
+                    drawSquareSpline(
+                        position.x,
+                        position.y,
+                        currentSize,
+                        0, // Sin rotación
+                        color,
+                        currentLineWidth
+                    );
+                }
+                
+                // Reducir tamaño y grosor de línea para el siguiente cuadrado
+                currentSize *= scaleRatio;
+                currentLineWidth = Math.max(0.1, currentLineWidth * 0.9);
+                
+                // Detener si el cuadrado es demasiado pequeño
+                if (currentSize < 1) break;
+            }
+            
+            // Solicitar el siguiente frame
+            requestAnimationFrame(draw);
+        }
+
+        // Eventos de mouse
+        canvas.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            isMouseActive = true;
+        });
+        
+        canvas.addEventListener('mouseout', () => {
+            isMouseActive = false;
+        });
+        
+        // Evento táctil para dispositivos móviles
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+            isMouseActive = true;
+        });
+        
+        canvas.addEventListener('touchend', () => {
+            isMouseActive = false;
+        });
+
+        // Manejar redimensionamiento de la ventana
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initialSize = calculateMainSquareSize(); // Actualizar tamaño del cuadrado principal
+        });
+
+        // Iniciar la animación
+        draw();
+    </script>
+</body>
+</html>

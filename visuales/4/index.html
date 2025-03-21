@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Líneas Spline con Voronoi Noise y Gradiente con "Add"</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <style>
+        /* Configuración del fondo */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Canvas donde se renderiza la animación */
+        canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="splineCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("splineCanvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const numLines = 100; // Cantidad de líneas
+        const lineSpacing = canvas.height / numLines; // Espaciado uniforme
+        const pointsPerLine = 20; // Puntos por cada línea para definir la curva
+        const noise = new SimplexNoise();
+        let time = 0;
+        let mouseX = -100, mouseY = -100;
+        const mouseEffectRadius = 200; // Área reducida del gradiente
+        let isMouseOver = false; // Para activar el gradiente solo cuando el mouse está dentro
+
+        // Función de gradiente eliminada
+
+        function voronoiNoise(x, y, t) {
+            return noise.noise3D(x * 0.015, y * 0.015, t * 0.04) * 40; // Ajustado para un efecto más dinámico
+        }
+
+        function drawSplines() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            for (let i = 0; i < numLines; i++) {
+                let yBase = i * lineSpacing;
+                let points = [];
+
+                for (let j = 0; j < pointsPerLine; j++) {
+                    let x = (j / (pointsPerLine - 1)) * canvas.width;
+                    let yOffset = voronoiNoise(x, yBase, time);
+
+                    // Interacción con el mouse: las líneas se alejan si el cursor está cerca
+                    let distToMouse = Math.hypot(mouseX - x, mouseY - yBase);
+                    let pushForce = Math.max(mouseEffectRadius - distToMouse, 0) * 0.6; // Ajuste del empuje
+                    let angle = Math.atan2(yBase - mouseY, x - mouseX);
+                    let pushY = Math.sin(angle) * pushForce;
+
+                    points.push({ x, y: yBase + yOffset + pushY, distToMouse });
+                }
+
+                drawSpline(points);
+            }
+
+            // Efecto de gradiente eliminado
+        }
+
+        function drawSpline(points) {
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+
+            for (let i = 1; i < points.length - 1; i++) {
+                let midX = (points[i].x + points[i + 1].x) / 2;
+                let midY = (points[i].y + points[i + 1].y) / 2;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            }
+
+            ctx.strokeStyle = "rgba(0, 255, 0, 0.6)"; // Mantiene el color verde en las líneas
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function animate() {
+            time += 0.025; // Ajuste de velocidad para suavidad
+            drawSplines();
+            requestAnimationFrame(animate);
+        }
+
+        // Capturar la posición del mouse para activar el gradiente y el desplazamiento
+        canvas.addEventListener("mousemove", (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            isMouseOver = true;
+        });
+
+        // Cuando el mouse sale, se desactiva la interacción
+        canvas.addEventListener("mouseleave", () => {
+            isMouseOver = false;
+            // Mover el mouse fuera del canvas (-9999) para eliminar el desplazamiento
+            mouseX = -9999;
+            mouseY = -9999;
+        });
+
+        // Inicialización automática del mouse eliminada
+
+        animate();
+    </script>
+</body>
+</html>

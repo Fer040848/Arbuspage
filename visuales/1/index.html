@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Esfera Generando Spline con Longitud Limitada</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="sphereCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("sphereCanvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Configuración - cambiado el color a azul (RGB 18, 94, 254)
+        const sphereRadius = 15; // Radio de la esfera
+        const sphereColor = "rgba(18, 94, 254, 1)"; // Azul brillante
+        const trailWidth = 15; // Grosor del rastro
+        const maxTrailLength = 750; // Cantidad máxima de puntos en el rastro
+        const speedFactor = 1.5; // Velocidad
+        
+        // Estado
+        let time = 0;
+        let sphere = {
+            x: canvas.width / 2, // Comenzar en el centro
+            y: canvas.height / 2,
+            vx: (Math.random() * 2 - 1) * speedFactor,
+            vy: (Math.random() * 2 - 1) * speedFactor,
+            trail: [] // Almacena las posiciones anteriores
+        };
+        
+        // Inicializar el trail con la posición inicial
+        sphere.trail.push({x: sphere.x, y: sphere.y});
+        
+        // Función para actualizar la posición de la esfera
+        function updateSphere() {
+            time += 0.01; // Velocidad de actualización
+            
+            // Movimiento principal con componente aleatorio
+            const noiseX = Math.sin(time * 2.5) * 0.7;
+            const noiseY = Math.cos(time * 2.1) * 0.7;
+            
+            // Actualizar velocidad con componente aleatorio
+            sphere.vx += noiseX * 0.05;
+            sphere.vy += noiseY * 0.05;
+            
+            // Limitar velocidad máxima
+            const speed = Math.sqrt(sphere.vx * sphere.vx + sphere.vy * sphere.vy);
+            if (speed > speedFactor * 2) {
+                sphere.vx = (sphere.vx / speed) * speedFactor * 2;
+                sphere.vy = (sphere.vy / speed) * speedFactor * 2;
+            } else if (speed < 0.1) {
+                // Evitar velocidades extremadamente pequeñas (puede causar parpadeos)
+                sphere.vx = sphere.vx * 1.5;
+                sphere.vy = sphere.vy * 1.5;
+            }
+            
+            // Actualizar posición
+            sphere.x += sphere.vx;
+            sphere.y += sphere.vy;
+            
+            // Manejar los bordes (permitiendo salir hasta 50px)
+            const margin = -50; // Valor negativo para permitir salir del canvas
+            
+            if (sphere.x < margin || sphere.x > canvas.width - margin) {
+                sphere.vx *= -1;
+                sphere.x = Math.max(margin, Math.min(canvas.width - margin, sphere.x));
+            }
+            
+            if (sphere.y < margin || sphere.y > canvas.height - margin) {
+                sphere.vy *= -1;
+                sphere.y = Math.max(margin, Math.min(canvas.height - margin, sphere.y));
+            }
+            
+            // Verificar si la nueva posición es significativamente diferente de la última
+            const lastPos = sphere.trail.length > 0 ? sphere.trail[sphere.trail.length - 1] : null;
+            const minDistance = 0.5; // Distancia mínima para añadir un nuevo punto
+            
+            if (!lastPos || 
+                Math.sqrt(Math.pow(sphere.x - lastPos.x, 2) + Math.pow(sphere.y - lastPos.y, 2)) > minDistance) {
+                // Solo agregar al trail si ha habido un movimiento significativo
+                sphere.trail.push({x: sphere.x, y: sphere.y});
+                
+                // Limitar longitud del trail
+                while (sphere.trail.length > maxTrailLength) {
+                    sphere.trail.shift(); // Eliminar la posición más antigua
+                }
+            }
+        }
+        
+        // Función para dibujar líneas simples
+        function drawTrail() {
+            if (sphere.trail.length < 2) return;
+            
+            // Crear un color sólido en lugar de un degradado para evitar parpadeos
+            // Colores cambiados a tonos de azul
+            const startColor = "rgba(9, 47, 127, 0.9)"; // Azul oscuro
+            const endColor = "rgba(18, 94, 254, 0.9)"; // Azul brillante
+            
+            // Dibujar segmentos individuales con colores interpolados
+            for (let i = 1; i < sphere.trail.length; i++) {
+                const ratio = i / (sphere.trail.length - 1);
+                
+                // Interpolación de color - cambiado a azul
+                const r = Math.floor(9 + ratio * 9); // 9 -> 18
+                const g = Math.floor(47 + ratio * 47); // 47 -> 94
+                const b = Math.floor(127 + ratio * 127); // 127 -> 254
+                const a = 0.9;
+                
+                const color = `rgba(${r}, ${g}, ${b}, ${a})`;
+                
+                // Dibujar un segmento de línea con color único
+                ctx.beginPath();
+                ctx.moveTo(sphere.trail[i-1].x, sphere.trail[i-1].y);
+                ctx.lineTo(sphere.trail[i].x, sphere.trail[i].y);
+                
+                ctx.strokeStyle = color;
+                ctx.lineWidth = trailWidth;
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.stroke();
+            }
+        }
+        
+        // Función principal de animación
+        function animate() {
+            // Limpiar el canvas
+            ctx.fillStyle = "rgba(0, 0, 0, 1)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Actualizar la posición de la esfera
+            updateSphere();
+            
+            // Dibujar el trail
+            drawTrail();
+            
+            // Dibujar la esfera
+            ctx.beginPath();
+            ctx.arc(sphere.x, sphere.y, sphereRadius, 0, Math.PI * 2);
+            ctx.fillStyle = sphereColor;
+            ctx.fill();
+            
+            // Agregar brillo/resplandor a la esfera con mayor intensidad - adaptado a color azul
+            const gradient = ctx.createRadialGradient(
+                sphere.x, sphere.y, 0,
+                sphere.x, sphere.y, sphereRadius * 3
+            );
+            gradient.addColorStop(0, "rgba(255, 255, 255, 0.9)"); // Blanco en el centro
+            gradient.addColorStop(0.3, "rgba(120, 170, 255, 0.7)"); // Azul claro
+            gradient.addColorStop(0.7, "rgba(50, 100, 200, 0.4)"); // Azul medio
+            gradient.addColorStop(1, "rgba(0, 0, 0, 0)"); // Desvanecimiento completo
+            
+            ctx.beginPath();
+            ctx.arc(sphere.x, sphere.y, sphereRadius * 3, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            // Solicitar el siguiente frame
+            requestAnimationFrame(animate);
+        }
+        
+        // Manejar redimensionamiento de la ventana
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // Iniciar la animación
+        animate();
+    </script>
+</body>
+</html>
